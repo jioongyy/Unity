@@ -146,6 +146,7 @@
     <Compile Include="NewTaskSystem\TaskCanceledExceptions.cs" />
     <Compile Include="NewTaskSystem\TaskExtensions.cs" />
     <Compile Include="NewTaskSystem\TaskManager.cs" />
+    <Compile Include="Platform\DeleteFilesExecTask.cs" />
     <Compile Include="Platform\FindExecTask.cs" />
     <Compile Include="Helpers\ProgressReport.cs" />
     <Compile Include="Metrics\IMetricsService.cs" />

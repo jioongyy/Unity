@@ -116,6 +116,11 @@ namespace GitHub.Unity
             return repositoryManager.CheckoutFiles(files);
         }
 
+        public ITask DeleteFiles(List<string> list)
+        {
+            return repositoryManager.DeleteFiles(list);
+        }
+
         public void CheckLogChangedEvent(CacheUpdateEvent cacheUpdateEvent)
         {
             var managedCache = cacheContainer.GitLogCache;

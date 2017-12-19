@@ -35,6 +35,7 @@ namespace GitHub.Unity
         ITask LockFile(string file);
         ITask UnlockFile(string file, bool force);
         ITask CheckoutFiles(List<string> files);
+        ITask DeleteFiles(List<string> list);
         void UpdateGitLog();
         void UpdateGitStatus();
         void UpdateGitAheadBehindStatus();
@@ -96,6 +97,7 @@ namespace GitHub.Unity
     {
         private readonly IGitConfig config;
         private readonly IGitClient gitClient;
+        private readonly IProcessManager processManager;
         private readonly IPlatform platform;
         private readonly IRepositoryPathConfiguration repositoryPaths;
         private readonly IRepositoryWatcher watcher;
@@ -111,21 +113,19 @@ namespace GitHub.Unity
         public event Action<Dictionary<string, ConfigBranch>> LocalBranchesUpdated;
         public event Action<Dictionary<string, ConfigRemote>, Dictionary<string, Dictionary<string, ConfigBranch>>> RemoteBranchesUpdated;
 
-        public RepositoryManager(IPlatform platform, IGitConfig gitConfig,
-            IRepositoryWatcher repositoryWatcher, IGitClient gitClient,
-            IRepositoryPathConfiguration repositoryPaths)
+        public RepositoryManager(IPlatform platform, IGitConfig gitConfig, IRepositoryWatcher repositoryWatcher, IGitClient gitClient, IProcessManager processManager, IRepositoryPathConfiguration repositoryPaths)
         {
             this.repositoryPaths = repositoryPaths;
             this.platform = platform;
             this.gitClient = gitClient;
+            this.processManager = processManager;
             this.watcher = repositoryWatcher;
             this.config = gitConfig;
 
             SetupWatcher();
         }
 
-        public static RepositoryManager CreateInstance(IPlatform platform, ITaskManager taskManager,
-            IGitClient gitClient, NPath repositoryRoot)
+        public static RepositoryManager CreateInstance(IPlatform platform, ITaskManager taskManager, IGitClient gitClient, IProcessManager processManager, NPath repositoryRoot)
         {
             var repositoryPathConfiguration = new RepositoryPathConfiguration(repositoryRoot);
             string filePath = repositoryPathConfiguration.DotGitConfig;
@@ -134,7 +134,7 @@ namespace GitHub.Unity
             var repositoryWatcher = new RepositoryWatcher(platform, repositoryPathConfiguration, taskManager.Token);
 
             return new RepositoryManager(platform, gitConfig, repositoryWatcher,
-                gitClient, repositoryPathConfiguration);
+                gitClient, processManager, repositoryPathConfiguration);
         }
 
         public void Initialize()
@@ -292,6 +292,21 @@ namespace GitHub.Unity
             discard.OnStart += t => IsBusy = true;
 
             return discard.Finally(() => IsBusy = false);
+        }
+
+        public ITask DeleteFiles(List<string> list)
+        {
+            ITask<List<string>> task = new DeleteFilesExecTask(list.ToArray(), CancellationToken.None)
+                .Configure(processManager);
+
+            task = HookupHandlers(task, true, true);
+
+            var @finally = task.Finally((b, exception, arg3) => {
+                Logger.Trace("Delete Files success:{0} output: {1}", b, arg3 != null ? string.Join(",", arg3.ToArray()) : "[NULL]");
+            });
+
+            return @finally
+                .Start();
         }
 
         public void UpdateGitAheadBehindStatus()

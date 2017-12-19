@@ -33,7 +33,7 @@ namespace IntegrationTests
 
             GitClient = new GitClient(Environment, ProcessManager, TaskManager);
 
-            var repositoryManager = GitHub.Unity.RepositoryManager.CreateInstance(Platform, TaskManager, GitClient, repoPath);
+            var repositoryManager = GitHub.Unity.RepositoryManager.CreateInstance(Platform, TaskManager, GitClient, ProcessManager, repoPath);
             onRepositoryManagerCreated?.Invoke(repositoryManager);
 
             RepositoryManager = repositoryManager;
