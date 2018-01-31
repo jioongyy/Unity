@@ -34,8 +34,7 @@ namespace GitHub.Unity
         ITask CreateBranch(string branch, string baseBranch);
         ITask LockFile(string file);
         ITask UnlockFile(string file, bool force);
-        ITask CheckoutFiles(List<string> files);
-        ITask DeleteFiles(List<string> list);
+        ITask DiscardChanges(List<GitStatusEntry> files);
         void UpdateGitLog();
         void UpdateGitStatus();
         void UpdateGitAheadBehindStatus();
@@ -288,26 +287,58 @@ namespace GitHub.Unity
             }).Start();
         }
 
-        public ITask CheckoutFiles(List<string> files)
+        public ITask DiscardChanges(List<GitStatusEntry> files)
         {
-            var discard = GitClient.Discard(files);
-            discard.OnStart += t => IsBusy = true;
+            var itemsToDelete = files
+                .Where(entry => entry.status == GitFileStatus.Added
+                    || entry.status == GitFileStatus.Untracked)
+                .Select(entry => entry.path)
+                .ToArray();
 
-            return discard.Finally(() => IsBusy = false);
-        }
+            ActionTask deleteItemsTask = null;
+            if (itemsToDelete.Any())
+            {
+                deleteItemsTask = new ActionTask(CancellationToken.None, () => {
+                    for (var index = 0; index < itemsToDelete.Length; index++)
+                    {
+                        var itemToDelete = itemsToDelete[index];
+                        fileSystem.FileDelete(itemToDelete);
+                    }
+                });
+            }
 
-        public ITask DeleteFiles(List<string> list)
-        {
-            var delete = new ActionTask(CancellationToken.None, () => {
-                for (var index = 0; index < list.Count; index++)
-                {
-                    fileSystem.FileDelete(list[index]);
-                }
-            });
+            var itemsToRevert = files
+                .Where(entry => entry.status == GitFileStatus.Modified
+                    || entry.status == GitFileStatus.Deleted
+                    || entry.status == GitFileStatus.Renamed)
+                .Select(entry => entry.path)
+                .ToArray();
 
-            delete.OnStart += t => IsBusy = true;
+            ITask<string> gitDiscardTask = null;
+            if (itemsToRevert.Any())
+            {
+                gitDiscardTask = GitClient.Discard(itemsToRevert);
+            }
 
-            return delete.Finally(() => IsBusy = false);
+            ITask task;
+            if(deleteItemsTask != null && gitDiscardTask != null)
+            {
+                task = deleteItemsTask.Then(gitDiscardTask);
+            }
+            else if (deleteItemsTask != null)
+            {
+                task = deleteItemsTask;
+            }
+            else if (gitDiscardTask != null)
+            {
+                task = gitDiscardTask;
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+
+            return HookupHandlers(task, true, true);
         }
 
         public void UpdateGitAheadBehindStatus()
@@ -385,6 +416,42 @@ namespace GitHub.Unity
                     }
 
                     throw exception;
+                });
+        }
+
+        private ITask HookupHandlers(ITask task, bool isExclusive, bool filesystemChangesExpected)
+        {
+            return new ActionTask(CancellationToken.None, () => {
+                    if (isExclusive)
+                    {
+                        Logger.Trace("Starting Operation - Setting Busy Flag");
+                        IsBusy = true;
+                    }
+
+                    if (filesystemChangesExpected)
+                    {
+                        Logger.Trace("Starting Operation - Disable Watcher");
+                        watcher.Stop();
+                    }
+                })
+                .Then(task)
+                .Finally((success, exception) => {
+                    if (filesystemChangesExpected)
+                    {
+                        Logger.Trace("Ended Operation - Enable Watcher");
+                        watcher.Start();
+                    }
+
+                    if (isExclusive)
+                    {
+                        Logger.Trace("Ended Operation - Clearing Busy Flag");
+                        IsBusy = false;
+                    }
+
+                    if (!success)
+                    {
+                        throw exception;
+                    }
                 });
         }
 
