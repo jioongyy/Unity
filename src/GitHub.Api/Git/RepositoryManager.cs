@@ -97,7 +97,6 @@ namespace GitHub.Unity
         private readonly IGitConfig config;
         private readonly IGitClient gitClient;
         private readonly IProcessManager processManager;
-        private readonly IPlatform platform;
         private readonly IRepositoryPathConfiguration repositoryPaths;
         private readonly IFileSystem fileSystem;
         private readonly IRepositoryWatcher watcher;
@@ -113,11 +112,10 @@ namespace GitHub.Unity
         public event Action<Dictionary<string, ConfigBranch>> LocalBranchesUpdated;
         public event Action<Dictionary<string, ConfigRemote>, Dictionary<string, Dictionary<string, ConfigBranch>>> RemoteBranchesUpdated;
 
-        public RepositoryManager(IPlatform platform, IGitConfig gitConfig, IRepositoryWatcher repositoryWatcher, IGitClient gitClient, IProcessManager processManager, IRepositoryPathConfiguration repositoryPaths, IFileSystem fileSystem)
+        public RepositoryManager(IGitConfig gitConfig, IRepositoryWatcher repositoryWatcher, IGitClient gitClient, IProcessManager processManager, IRepositoryPathConfiguration repositoryPaths, IFileSystem fileSystem)
         {
             this.repositoryPaths = repositoryPaths;
             this.fileSystem = fileSystem;
-            this.platform = platform;
             this.gitClient = gitClient;
             this.processManager = processManager;
             this.watcher = repositoryWatcher;
@@ -134,7 +132,7 @@ namespace GitHub.Unity
 
             var repositoryWatcher = new RepositoryWatcher(platform, repositoryPathConfiguration, taskManager.Token);
 
-            return new RepositoryManager(platform, gitConfig, repositoryWatcher,
+            return new RepositoryManager(gitConfig, repositoryWatcher,
                 gitClient, processManager, repositoryPathConfiguration, fileSystem);
         }
 
