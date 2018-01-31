@@ -659,9 +659,6 @@ namespace GitHub.Unity
         public User(ICacheContainer cacheContainer)
         {
             this.cacheContainer = cacheContainer;
-
-            cacheContainer.GitUserCache.CacheInvalidated += GitUserCacheOnCacheInvalidated;
-            cacheContainer.GitUserCache.CacheUpdated += GitUserCacheOnCacheUpdated;
         }
 
         public void CheckUserChangedEvent(CacheUpdateEvent cacheUpdateEvent)
@@ -687,6 +684,9 @@ namespace GitHub.Unity
             Logger.Trace("Initialize");
 
             gitClient = client;
+
+            cacheContainer.GitUserCache.CacheInvalidated += GitUserCacheOnCacheInvalidated;
+            cacheContainer.GitUserCache.CacheUpdated += GitUserCacheOnCacheUpdated;
             cacheContainer.GitUserCache.ValidateData();
         }
 
