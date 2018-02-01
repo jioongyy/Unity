@@ -16,6 +16,7 @@ namespace GitHub.Unity
         event Action<List<GitLogEntry>> GitLogUpdated;
         event Action<Dictionary<string, ConfigBranch>> LocalBranchesUpdated;
         event Action<Dictionary<string, ConfigRemote>, Dictionary<string, Dictionary<string, ConfigBranch>>> RemoteBranchesUpdated;
+        event Action<GitAheadBehindStatus> GitAheadBehindStatusUpdated;
 
         void Initialize();
         void Start();
@@ -34,7 +35,7 @@ namespace GitHub.Unity
         ITask CreateBranch(string branch, string baseBranch);
         ITask LockFile(string file);
         ITask UnlockFile(string file, bool force);
-        ITask DiscardChanges(List<GitStatusEntry> files);
+        ITask DiscardChanges(GitStatusEntry[] gitStatusEntries);
         void UpdateGitLog();
         void UpdateGitStatus();
         void UpdateGitAheadBehindStatus();
@@ -44,7 +45,6 @@ namespace GitHub.Unity
         IGitConfig Config { get; }
         IGitClient GitClient { get; }
         bool IsBusy { get; }
-        event Action<GitAheadBehindStatus> GitAheadBehindStatusUpdated;
     }
 
     interface IRepositoryPathConfiguration
@@ -285,32 +285,35 @@ namespace GitHub.Unity
             }).Start();
         }
 
-        public ITask DiscardChanges(List<GitStatusEntry> files)
+        public ITask DiscardChanges(GitStatusEntry[] gitStatusEntries)
         {
-            var itemsToDelete = files
-                .Where(entry => entry.status == GitFileStatus.Added
-                    || entry.status == GitFileStatus.Untracked)
-                .Select(entry => entry.path)
-                .ToArray();
+            Guard.ArgumentNotNullOrEmpty(gitStatusEntries, "gitStatusEntries");
+
+            var itemsToDelete = new List<string>();
+            var itemsToRevert = new List<string>();
+
+            foreach (var gitStatusEntry in gitStatusEntries)
+            {
+                if (gitStatusEntry.status == GitFileStatus.Added || gitStatusEntry.status == GitFileStatus.Untracked)
+                {
+                    itemsToDelete.Add(gitStatusEntry.path);
+                }
+                else
+                {
+                    itemsToRevert.Add(gitStatusEntry.path);
+                }
+            }
 
             ActionTask deleteItemsTask = null;
             if (itemsToDelete.Any())
             {
                 deleteItemsTask = new ActionTask(CancellationToken.None, () => {
-                    for (var index = 0; index < itemsToDelete.Length; index++)
+                    foreach (var itemToDelete in itemsToDelete)
                     {
-                        var itemToDelete = itemsToDelete[index];
                         fileSystem.FileDelete(itemToDelete);
                     }
                 });
             }
-
-            var itemsToRevert = files
-                .Where(entry => entry.status == GitFileStatus.Modified
-                    || entry.status == GitFileStatus.Deleted
-                    || entry.status == GitFileStatus.Renamed)
-                .Select(entry => entry.path)
-                .ToArray();
 
             ITask<string> gitDiscardTask = null;
             if (itemsToRevert.Any())
@@ -319,7 +322,7 @@ namespace GitHub.Unity
             }
 
             ITask task;
-            if(deleteItemsTask != null && gitDiscardTask != null)
+            if (deleteItemsTask != null && gitDiscardTask != null)
             {
                 task = deleteItemsTask.Then(gitDiscardTask);
             }
@@ -327,13 +330,9 @@ namespace GitHub.Unity
             {
                 task = deleteItemsTask;
             }
-            else if (gitDiscardTask != null)
+            else //if (gitDiscardTask != null)
             {
                 task = gitDiscardTask;
-            }
-            else
-            {
-                throw new NotImplementedException();
             }
 
             return HookupHandlers(task, true, true);
